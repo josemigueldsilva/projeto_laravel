@@ -1,45 +1,118 @@
 <h1>Criar Novo Torneio</h1>
 
-    @if ($errors->any())
-        <div class="alert alert-danger">
-            <ul>
-                @foreach ($errors->all() as $error)
-                    <li>{{ $error }}</li>
-                @endforeach
-            </ul>
-        </div>
-    @endif
+@if ($errors->any())
+    <div class="alert alert-danger">
+        <ul>
+            @foreach ($errors->all() as $error)
+                <li>{{ $error }}</li>
+            @endforeach
+        </ul>
+    </div>
+@endif
 
-    <form action="{{ route('torneios.store') }}" method="POST">
-        @csrf
+<form action="{{ route('torneios.store') }}" method="POST" class="tournament-form">
+    @csrf
 
-        <label for="nome">Nome do Torneio:</label>
-        <input type="text" id="nome" name="nome" value="{{ old('nome') }}" required>
+    <label for="nome">Nome do Torneio:</label>
+    <input type="text" id="nome" name="nome" value="{{ old('nome') }}" required>
 
-        <label for="descricao">Descrição:</label>
-        <textarea id="descricao" name="descricao">{{ old('descricao') }}</textarea>
+    <label for="descricao">Descrição:</label>
+    <textarea id="descricao" name="descricao" required>{{ old('descricao') }}</textarea>
 
-        <label for="quantidade-times">Quantidade de Times:</label>
-        <input type="number" id="quantidade-times" name="quantidade_times" min="2" required>
+    <label for="quantidade-times">Quantidade de Times:</label>
+    <input type="number" id="quantidade-times" name="quantidade_times" min="2" required>
 
-        <label for="formato">Formato:</label>
-        <select id="formato" name="formato" required>
-            <option value="eliminacao_simples">Eliminação Simples</option>
-            <option value="fase_grupos">Fase de Grupos</option>
-        </select>
+    <label for="times">Nome dos Times:</label>
+    <div id="nomes-times">
+        <!-- Os campos de nomes dos times serão adicionados dinamicamente aqui pelo JS -->
+    </div>
 
-        <div id="grupos-config" style="display: none;">
-            <label for="times-por-grupo">Times por Grupo:</label>
-            <input type="number" id="times-por-grupo" name="times_por_grupo" min="1">
-        </div>
+    <button type="submit">Criar Torneio</button>
+</form>
 
-        <label for="times">Nome dos Times:</label>
-        <div id="nomes-times">
-            <!-- Os campos de nomes dos times serão adicionados dinamicamente aqui pelo JS -->
-        </div>
+<style>
+    /* Estilos do formulário */
+    .tournament-form {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f9f9f9;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
 
-        <button type="submit">Criar Torneio</button>
-    </form>
-    
-    <!-- Adicione o JavaScript para manipular os campos dinâmicos -->
-    <script src="{{ asset('js/torneio.js') }}"></script>
+    h1 {
+        text-align: center;
+        color: #333;
+        margin-bottom: 20px;
+    }
+
+    label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: bold;
+        color: #555;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    textarea {
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 15px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 16px;
+    }
+
+    textarea {
+        resize: vertical; /* Permite redimensionar verticalmente */
+        height: 100px; /* Altura padrão para a textarea */
+    }
+
+    button {
+        width: 100%;
+        padding: 10px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+
+    button:hover {
+        background-color: #0056b3;
+    }
+
+    .alert {
+        margin-bottom: 20px;
+        padding: 10px;
+        border-radius: 4px;
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const quantidadeTimesInput = document.getElementById('quantidade-times');
+        const nomesTimesContainer = document.getElementById('nomes-times');
+
+        quantidadeTimesInput.addEventListener('input', function () {
+            const quantidadeTimes = parseInt(this.value) || 0;
+            nomesTimesContainer.innerHTML = ''; // Limpa os campos de nomes dos times
+
+            // Adiciona os campos de entrada para cada time
+            for (let i = 0; i < quantidadeTimes; i++) {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.name = 'times[]';
+                input.placeholder = `Nome do Time ${i + 1}`;
+                input.required = true;
+                nomesTimesContainer.appendChild(input);
+            }
+        });
+    });
+</script>

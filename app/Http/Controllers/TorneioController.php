@@ -17,10 +17,8 @@ class TorneioController extends Controller
         $request->validate([
             'nome' => 'required|string|max:255',
             'descricao' => 'nullable|string',
-            'quantidade_times' => 'required|integer',
+            'quantidade_times' => 'required|integer|min:2',
             'times' => 'required|array',
-            'formato' => 'required|string',
-            'times_por_grupo' => 'nullable|integer',
         ]);
 
         $torneio = new Torneio();
@@ -29,22 +27,10 @@ class TorneioController extends Controller
         $torneio->descricao = $request->descricao;
         $torneio->quantidade_times = $request->quantidade_times;
         $torneio->times = json_encode($request->times);
-        $torneio->formato = $request->formato;
-        $torneio->times_por_grupo = $request->times_por_grupo;
 
-        // Gerar grupos apenas na criação
-        if ($torneio->formato == 'fase_grupos') {
-            $times = $request->times;
-            shuffle($times);
-            $quantidadeGrupos = ceil($request->quantidade_times / $request->times_por_grupo);
-            $grupos = [];
-
-            for ($i = 0; $i < $quantidadeGrupos; $i++) {
-                $grupos[$i + 1] = array_slice($times, $i * $request->times_por_grupo, $request->times_por_grupo);
-            }
-
-            $torneio->grupos = json_encode($grupos);
-        }
+        // Sorteio inicial dos confrontos
+        $confrontos = $this->sorteioEliminacao($request->times);
+        $torneio->confrontos = json_encode($confrontos);
 
         $torneio->save();
 
@@ -52,49 +38,65 @@ class TorneioController extends Controller
     }
 
     public function show($id)
+{
+    $torneio = Torneio::findOrFail($id);
+    $torneio->times = json_decode($torneio->times);
+    $confrontos = json_decode($torneio->confrontos, true) ?? []; // Converte para array ou inicializa como vazio
+
+    return view('torneios.show', compact('torneio', 'confrontos'));
+}
+
+    public function salvarResultados(Request $request, $id)
+{
+    $request->validate([
+        'avancam' => 'required|array', // Lista dos times que avançam
+    ]);
+
+    $torneio = Torneio::findOrFail($id);
+    $timesQueAvancam = $request->input('avancam');
+
+    // Verifica se restou apenas um time avançando, o que significa que temos um campeão
+    if (count($timesQueAvancam) === 1) {
+        $torneio->campeao = $timesQueAvancam[0]; // Define o campeão
+        $torneio->confrontos = null; // Remove os confrontos, pois o torneio acabou
+        $torneio->save();
+
+        return redirect()->route('torneios.show', $torneio->id)
+            ->with('success', 'Parabéns ao campeão: ' . $torneio->campeao . '!');
+    }
+
+    // Caso contrário, gere os próximos confrontos
+    $this->gerarProximosConfrontos($torneio, $timesQueAvancam);
+
+    return redirect()->route('torneios.show', $torneio->id)
+        ->with('success', 'Resultados salvos e próximos confrontos gerados com sucesso!');
+}
+
+    private function gerarProximosConfrontos($torneio, $timesQueAvancam)
     {
-        $torneio = Torneio::findOrFail($id);
-        $torneio->times = json_decode($torneio->times);
-        
-        // Modifique esta linha
-        $torneio->pontuacoes = json_decode($torneio->pontuacoes, true) ?? []; // Isso evitará o erro se for um array
-    
-        $grupos = [];
+        shuffle($timesQueAvancam); // Embaralha os times que avançaram
+
         $confrontos = [];
-        
-        if ($torneio->formato == 'fase_grupos') {
-            $times = $torneio->times;
-            $grupos = json_decode($torneio->grupos, true); // Recupera os grupos do torneio
-
-            // Cria partidas para fase de grupos
-            foreach ($grupos as $grupo) {
-                for ($i = 0; $i < count($grupo); $i++) {
-                    for ($j = $i + 1; $j < count($grupo); $j++) {
-                        $confrontos[] = [$grupo[$i], $grupo[$j]];
-                    }
-                }
-            }
-        } elseif ($torneio->formato == 'eliminacao_simples') {
-            $times = $torneio->times;
-            shuffle($times); // Embaralha os times
-
-            // Cria os confrontos (simples, para exemplo)
-            for ($i = 0; $i < count($times); $i += 2) {
-                if (isset($times[$i + 1])) {
-                    $confrontos[] = [$times[$i], $times[$i + 1]];
-                }
+        for ($i = 0; $i < count($timesQueAvancam); $i += 2) {
+            if (isset($timesQueAvancam[$i + 1])) {
+                $confrontos[] = [$timesQueAvancam[$i], $timesQueAvancam[$i + 1]];
             }
         }
 
-        return view('torneios.show', compact('torneio', 'grupos', 'confrontos'));
+        $torneio->confrontos = json_encode($confrontos);
+        $torneio->save();
     }
 
-    public function pesquisar(Request $request)
+    private function sorteioEliminacao($times)
     {
-        $query = $request->input('query'); // Obtenha a consulta da barra de pesquisa
-        $torneios = Torneio::where('nome', 'LIKE', '%' . $query . '%')->get(); // Pesquise torneios
-
-        return view('torneios.resultados', compact('torneios'));
+        shuffle($times);
+        $confrontos = [];
+        for ($i = 0; $i < count($times); $i += 2) {
+            if (isset($times[$i + 1])) {
+                $confrontos[] = [$times[$i], $times[$i + 1]];
+            }
+        }
+        return $confrontos;
     }
 
     public function index()
@@ -104,10 +106,13 @@ class TorneioController extends Controller
     }
 
     public function edit($id)
-    {
-        $torneio = Torneio::findOrFail($id); // Encontrar torneio pelo ID
-        return view('torneios.edit', compact('torneio'));
-    }
+{
+    // Encontra o torneio pelo ID
+    $torneio = Torneio::findOrFail($id);
+
+    // Retorna a view de edição com os dados do torneio
+    return view('torneios.edit', compact('torneio'));
+}
 
     public function update(Request $request, $id)
     {
@@ -133,80 +138,13 @@ class TorneioController extends Controller
         return redirect()->route('torneios.index')->with('success', 'Torneio excluído com sucesso!');
     }
 
-    public function salvarResultados(Request $request, $id)
-    {
-        $request->validate([
-            'resultados' => 'required|array',
-        ]);
+    public function pesquisar(Request $request)
+{
+    $query = $request->input('query');
 
-        $torneio = Torneio::findOrFail($id);
-        $resultados = $request->input('resultados');
-        $pontuacoes = json_decode($torneio->pontuacoes, true) ?? []; // Garante que seja um array
+    // Buscando torneios com base na consulta
+    $torneios = Torneio::where('nome', 'LIKE', "%{$query}%")->get(); // Supondo que você tenha um campo 'nome' na tabela torneios
 
-        // Processa os resultados
-        foreach ($resultados as $partida => $gols) {
-            // Verifica se o array de gols contém exatamente dois valores
-            if (!is_array($gols) || count($gols) !== 2) {
-                continue; // Pula se os gols não estiverem definidos corretamente
-            }
-
-            $golsMarcados = (int)$gols[0]; // Gols do time 1
-            $golsSofridos = (int)$gols[1]; // Gols do time 2
-
-            // Obtém os times da partida
-            $times = explode(' x ', $partida);
-            if (count($times) < 2) {
-                continue; // Pula se não encontrar dois times
-            }
-            
-            $time1 = trim($times[0]);
-            $time2 = trim($times[1]);
-
-            // Inicializa as pontuações se não existirem
-            if (!isset($pontuacoes[$time1])) {
-                $pontuacoes[$time1] = 0;
-            }
-            if (!isset($pontuacoes[$time2])) {
-                $pontuacoes[$time2] = 0;
-            }
-
-            // Atualiza pontuações com base nos resultados
-            if ($golsMarcados > $golsSofridos) {
-                $pontuacoes[$time1] += 3; // Vitória para time1
-            } elseif ($golsMarcados < $golsSofridos) {
-                $pontuacoes[$time2] += 3; // Vitória para time2
-            } else {
-                $pontuacoes[$time1] += 1; // Empate
-                $pontuacoes[$time2] += 1; // Empate
-            }
-        }
-
-        // Atualiza as pontuações no banco de dados
-        $torneio->pontuacoes = json_encode($pontuacoes);
-        $torneio->save();
-
-        // Gerar próximos confrontos para eliminação se o formato for eliminatório
-        if ($torneio->formato === 'eliminacao_simples') {
-            $this->gerarProximosConfrontos($torneio);
-        }
-
-        return redirect()->route('torneios.show', $torneio->id)->with('success', 'Resultados salvos com sucesso!');
-    }
-
-    private function gerarProximosConfrontos($torneio)
-    {
-        $times = json_decode($torneio->times);
-        shuffle($times); // Embaralha os times
-
-        $confrontos = [];
-        for ($i = 0; $i < count($times); $i += 2) {
-            if (isset($times[$i + 1])) {
-                $confrontos[] = [$times[$i], $times[$i + 1]];
-            }
-        }
-
-        // Aqui você deve armazenar os confrontos no banco de dados, se necessário.
-        // Por exemplo, $torneio->confrontos = json_encode($confrontos);
-        // $torneio->save();
-    }
+    return view('torneios.pesquisar', compact('torneios', 'query'));
+}
 }

@@ -53,7 +53,7 @@ class AuthController extends Controller
             if (Auth::attempt($credentials)) {
             // Login bem-sucedido
             $request->session()->regenerate();
-            return redirect()->intended('principal')->with('success', 'Login bem-sucedido!');
+            return redirect()->intended('/principal')->with('success', 'Login bem-sucedido!');
         }
 
     // Se as credenciais estiverem erradas
